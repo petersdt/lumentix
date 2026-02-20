@@ -7,6 +7,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { EventsModule } from './events/events.module';
 import { StellarModule } from './stellar/stellar.module';
+import { SponsorsModule } from './sponsors/sponsors.module';
 import { WalletModule } from './wallet/wallet.module';
 
 @Module({
@@ -34,6 +35,7 @@ import { WalletModule } from './wallet/wallet.module';
     AuthModule,
     EventsModule,
     StellarModule,
+    SponsorsModule,
     WalletModule,
   ],
   controllers: [AppController],
