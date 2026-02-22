@@ -59,7 +59,13 @@ export class PaymentsService {
     // 1. Validate event exists
     const event = await this.eventsService.getEventById(eventId);
 
-    // 2. Validate event is published
+    // 2. Validate event is published — covers suspended (CANCELLED) events too
+    if (event.status === EventStatus.CANCELLED) {
+      throw new BadRequestException(
+        `Event "${event.title}" has been suspended and is no longer available for purchase.`,
+      );
+    }
+
     if (event.status !== EventStatus.PUBLISHED) {
       throw new BadRequestException(
         `Event "${event.title}" is not available for purchase (status: ${event.status}).`,
@@ -100,7 +106,7 @@ export class PaymentsService {
       escrowWallet: this.escrowWallet,
       amount: event.ticketPrice,
       currency,
-      memo: saved.id, // caller sets this as the Stellar memo so we can correlate
+      memo: saved.id,
     };
   }
 
@@ -109,7 +115,6 @@ export class PaymentsService {
   // ─────────────────────────────────────────────────────────────────────────
 
   async confirmPayment(transactionHash: string): Promise<Payment> {
-    // 1. Fetch the on-chain transaction via StellarService (no direct Horizon calls)
     let txRecord: Awaited<ReturnType<StellarService['getTransaction']>>;
     try {
       txRecord = await this.stellarService.getTransaction(transactionHash);
@@ -119,8 +124,6 @@ export class PaymentsService {
       );
     }
 
-    // 2. Find pending payment — match via memo (set to paymentId by the client)
-    // TransactionRecord.memo is typed as string | undefined in the Stellar SDK
     const memoValue: string | undefined =
       typeof txRecord.memo === 'string' ? txRecord.memo : undefined;
 
@@ -140,9 +143,6 @@ export class PaymentsService {
       );
     }
 
-    // 3. Fetch operations to validate destination & amount
-    // StellarService.getTransaction returns the transaction record.
-    // We resolve operations via the _links on the record.
     const ops = await this.resolvePaymentOperations(txRecord);
 
     if (ops.length === 0) {
@@ -155,7 +155,6 @@ export class PaymentsService {
       );
     }
 
-    // 4. Find the operation that matches our escrow wallet
     const matchingOp = ops.find((op) => op.to === this.escrowWallet);
 
     if (!matchingOp) {
@@ -168,7 +167,6 @@ export class PaymentsService {
       );
     }
 
-    // 5. Validate asset type
     const assetCode: string =
       matchingOp.asset_type === 'native'
         ? 'XLM'
@@ -189,7 +187,6 @@ export class PaymentsService {
       throw new BadRequestException(`Asset "${assetCode}" is not supported.`);
     }
 
-    // 6. Validate amount (Stellar amounts are strings with 7 decimal places)
     const onChainAmount = parseFloat(matchingOp.amount);
     const expectedAmount = parseFloat(String(payment.amount));
 
@@ -203,7 +200,6 @@ export class PaymentsService {
       );
     }
 
-    // 7. Mark confirmed
     payment.transactionHash = transactionHash;
     payment.status = PaymentStatus.CONFIRMED;
     const confirmed = await this.paymentsRepository.save(payment);
@@ -226,6 +222,24 @@ export class PaymentsService {
     return confirmed;
   }
 
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Tickets dependency helper
+  // ─────────────────────────────────────────────────────────────────────────
+
+  async getPaymentById(paymentId: string): Promise<Payment> {
+    const payment = await this.paymentsRepository.findOne({
+      where: { id: paymentId },
+    });
+
+    if (!payment) {
+      throw new NotFoundException(`Payment "${paymentId}" not found.`);
+    }
+
+    return payment;
+  }
+
+
   // ─────────────────────────────────────────────────────────────────────────
   // Helpers
   // ─────────────────────────────────────────────────────────────────────────
@@ -234,17 +248,9 @@ export class PaymentsService {
     txRecord: Awaited<ReturnType<StellarService['getTransaction']>>,
   ): Promise<PaymentOp[]> {
     try {
-      // The Horizon transaction record exposes a _links.operations href
-      // TransactionRecord._links is typed by the Stellar SDK — no cast needed
       const opsHref: string | undefined = txRecord._links.operations?.href;
-
       if (!opsHref) return [];
 
-      // Fetch via the existing getTransaction shape — we re-use the server
-      // indirectly through StellarService to stay compliant with the "no direct
-      // Horizon calls" rule.  Since StellarService doesn't expose an operations
-      // endpoint, we call the already-resolved href through native fetch, which
-      // is acceptable here as it is not a direct `new Server()` instantiation.
       const res = await fetch(opsHref);
       if (!res.ok) return [];
 
@@ -275,6 +281,7 @@ export class PaymentsService {
     );
   }
 }
+
 
 // ─── Internal type helpers ────────────────────────────────────────────────────
 
