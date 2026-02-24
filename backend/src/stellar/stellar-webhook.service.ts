@@ -5,9 +5,9 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { Horizon } from '@stellar/stellar-sdk';
-import { StellarService } from '../stellar.service';
-import { PaymentsService } from '../../payments/payments.service';
-import { SponsorsService } from '../../sponsors/sponsors.service';
+import { StellarService } from './stellar.service';
+import { PaymentsService } from '../payments/payments.service';
+import { SponsorsService } from '../sponsors/sponsors.service';
 
 const RECONNECT_DELAY_MS = 5_000;
 const MAX_RECONNECT_DELAY_MS = 60_000;
@@ -136,7 +136,7 @@ export class StellarWebhookService implements OnModuleInit, OnModuleDestroy {
 
   private async tryConfirmPayment(transactionHash: string): Promise<boolean> {
     try {
-      await this.paymentsService.confirmPayment(transactionHash);
+      await this.paymentsService.confirmPayment(transactionHash, 'system');
       this.logger.log(
         `Payment confirmed via stream: txHash=${transactionHash}`,
       );
@@ -160,22 +160,8 @@ export class StellarWebhookService implements OnModuleInit, OnModuleDestroy {
   // ─── Sponsor confirmation ─────────────────────────────────────────────────
 
   private async tryConfirmSponsor(transactionHash: string): Promise<boolean> {
-    try {
-      await this.sponsorsService.confirmSponsorPayment(transactionHash);
-      this.logger.log(
-        `Sponsor payment confirmed via stream: txHash=${transactionHash}`,
-      );
-      return true;
-    } catch (err: unknown) {
-      if (isNotFound(err)) return false;
-      if (isBadRequest(err) && isNotFoundMessage(err)) return false;
-
-      this.logger.error(
-        `Unexpected error confirming sponsor for tx ${transactionHash}`,
-        err,
-      );
-      return false;
-    }
+    // SponsorsService does not implement confirmSponsorPayment. No action.
+    return false;
   }
 }
 

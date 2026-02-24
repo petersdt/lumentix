@@ -1,3 +1,5 @@
+// ...existing code...
+// ...existing code...
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -87,5 +89,32 @@ export class ExchangeRatesService {
         `Could not retrieve exchange rate for ${fromCode}→${toCode}.`,
       );
     }
+  }
+  async create(
+    createExchangeRateDto: Partial<ExchangeRate>,
+  ): Promise<ExchangeRate> {
+    const rate = this.ratesRepository.create(createExchangeRateDto);
+    return await this.ratesRepository.save(rate);
+  }
+
+  async findAll(): Promise<ExchangeRate[]> {
+    return await this.ratesRepository.find();
+  }
+
+  async findOne(id: string): Promise<ExchangeRate | undefined> {
+    const result = await this.ratesRepository.findOne({ where: { id } });
+    return result ?? undefined;
+  }
+
+  async update(
+    id: string,
+    updateExchangeRateDto: Partial<ExchangeRate>,
+  ): Promise<ExchangeRate | undefined> {
+    await this.ratesRepository.update(id, updateExchangeRateDto);
+    return await this.findOne(id);
+  }
+
+  async remove(id: string): Promise<void> {
+    await this.ratesRepository.delete(id);
   }
 }

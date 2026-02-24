@@ -1,4 +1,6 @@
-import * as crypto from 'crypto';
+import * as qrcode from 'qrcode';
+import { TicketSigningService } from './ticket-signing.service';
+import { IssueTicketResponseDto } from './dto/issue-ticket-response.dto';
 import {
   BadRequestException,
   ForbiddenException,
@@ -15,6 +17,9 @@ import { TicketEntity } from './entities/ticket.entity';
 import { PaymentsService } from '../payments/payments.service';
 import { PaymentStatus } from '../payments/entities/payment.entity';
 import { StellarService } from '../stellar/stellar.service';
+import { NotificationService } from '../notifications/notification.service';
+import { Event } from '../events/entities/event.entity';
+import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class TicketsService {
@@ -24,9 +29,15 @@ export class TicketsService {
     private readonly paymentsService: PaymentsService,
     private readonly stellarService: StellarService,
     private readonly configService: ConfigService,
+    private readonly ticketSigningService: TicketSigningService,
+    private readonly notificationService: NotificationService,
+    @InjectRepository(Event)
+    private readonly eventRepo: Repository<Event>,
+    @InjectRepository(User)
+    private readonly userRepo: Repository<User>,
   ) {}
 
-  async issueTicket(paymentId: string): Promise<TicketEntity> {
+  async issueTicket(paymentId: string): Promise<IssueTicketResponseDto> {
     const payment = await this.paymentsService.getPaymentById(paymentId);
 
     if (payment.status !== PaymentStatus.CONFIRMED) {
@@ -40,7 +51,12 @@ export class TicketsService {
     const existing = await this.ticketRepo.findOne({
       where: { transactionHash: payment.transactionHash },
     });
-    if (existing) return existing;
+    if (existing) {
+      const signature = this.ticketSigningService.sign(existing.id);
+      const qrPayload = JSON.stringify({ ticketId: existing.id, signature });
+      const qrCodeDataUrl = await qrcode.toDataURL(qrPayload);
+      return { ticket: existing, signature, qrCodeDataUrl };
+    }
 
     const tx = await this.stellarService.getTransaction(
       payment.transactionHash,
@@ -71,8 +87,24 @@ export class TicketsService {
 
     // Persist first to obtain the auto-generated UUID, then sign it
     const saved = await this.ticketRepo.save(ticket);
-    saved.signature = this.signTicketId(saved.id);
-    return this.ticketRepo.save(saved);
+    const signature = this.ticketSigningService.sign(saved.id);
+    const qrPayload = JSON.stringify({ ticketId: saved.id, signature });
+    const qrCodeDataUrl = await qrcode.toDataURL(qrPayload);
+
+    // Fetch user email and event name
+    const user = await this.userRepo.findOne({ where: { id: payment.userId } });
+    const event = await this.eventRepo.findOne({
+      where: { id: payment.eventId },
+    });
+    if (user && event) {
+      await this.notificationService.queueTicketEmail({
+        email: user.email,
+        ticketId: saved.id,
+        eventName: event.title,
+      });
+    }
+
+    return { ticket: saved, signature, qrCodeDataUrl };
   }
 
   async transferTicket(
@@ -101,7 +133,7 @@ export class TicketsService {
   ): Promise<TicketEntity> {
     // 1. Cryptographic signature check — must come before any DB lookup
     //    to avoid leaking ticket existence to unauthenticated callers.
-    if (!this.verifySignature(ticketId, signature)) {
+    if (!this.ticketSigningService.verify(ticketId, signature)) {
       throw new UnauthorizedException('Invalid ticket signature');
     }
 
@@ -126,51 +158,5 @@ export class TicketsService {
     return this.ticketRepo.save(ticket);
   }
 
-  // ─── Private helpers ───────────────────────────────────────────────────────
-
-  /**
-   * Signs `ticketId` with the server's PEM-formatted private key.
-   * Algorithm: SHA-256 with RSA-PSS or EC depending on key type.
-   * Returns a lowercase hex string.
-   */
-  private signTicketId(ticketId: string): string {
-    const privateKey = this.configService.get<string>(
-      'TICKET_SIGNING_PRIVATE_KEY',
-    );
-    if (!privateKey) {
-      throw new InternalServerErrorException(
-        'TICKET_SIGNING_PRIVATE_KEY is not configured.',
-      );
-    }
-
-    const signer = crypto.createSign('SHA256');
-    signer.update(ticketId);
-    signer.end();
-    return signer.sign(privateKey, 'hex');
-  }
-
-  /**
-   * Verifies that `signature` (hex) was produced by signing `ticketId`
-   * with the private key corresponding to TICKET_SIGNING_PUBLIC_KEY.
-   */
-  private verifySignature(ticketId: string, signature: string): boolean {
-    const publicKey = this.configService.get<string>(
-      'TICKET_SIGNING_PUBLIC_KEY',
-    );
-    if (!publicKey) {
-      throw new InternalServerErrorException(
-        'TICKET_SIGNING_PUBLIC_KEY is not configured.',
-      );
-    }
-
-    try {
-      const verifier = crypto.createVerify('SHA256');
-      verifier.update(ticketId);
-      verifier.end();
-      return verifier.verify(publicKey, signature, 'hex');
-    } catch {
-      // Malformed signature string (wrong length, non-hex, etc.)
-      return false;
-    }
-  }
+  // Private helpers removed; now handled by TicketSigningService
 }

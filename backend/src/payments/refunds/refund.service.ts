@@ -6,13 +6,13 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Payment, PaymentStatus } from '../../entities/payment.entity';
-import { TicketEntity } from '../../../tickets/entities/ticket.entity';
-import { Event, EventStatus } from '../../../events/entities/event.entity';
-import { User } from '../../../users/entities/user.entity';
-import { StellarService } from '../../../stellar/stellar.service';
-import { AuditService } from '../../../audit/audit.service';
-import { EscrowService } from '../escrow.service';
+import { Payment, PaymentStatus } from '../entities/payment.entity';
+import { TicketEntity } from '../../tickets/entities/ticket.entity';
+import { Event, EventStatus } from '../../events/entities/event.entity';
+import { User } from '../../users/entities/user.entity';
+import { StellarService } from '../../stellar/stellar.service';
+import { AuditService } from '../../audit/audit.service';
+import { EscrowService } from '../services/escrow.service';
 import { RefundResultDto } from './dto/refund-result.dto';
 
 @Injectable()

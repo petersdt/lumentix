@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+} from '@nestjs/common';
 import { ExchangeRatesService } from './exchange-rates.service';
 import { CreateExchangeRateDto } from './dto/create-exchange-rate.dto';
 import { UpdateExchangeRateDto } from './dto/update-exchange-rate.dto';
@@ -19,16 +27,19 @@ export class ExchangeRatesController {
 
   @Get(':id')
   findOne(@Param('id') id: string) {
-    return this.exchangeRatesService.findOne(+id);
+    return this.exchangeRatesService.findOne(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateExchangeRateDto: UpdateExchangeRateDto) {
-    return this.exchangeRatesService.update(+id, updateExchangeRateDto);
+  update(
+    @Param('id') id: string,
+    @Body() updateExchangeRateDto: UpdateExchangeRateDto,
+  ) {
+    return this.exchangeRatesService.update(id, updateExchangeRateDto);
   }
 
   @Delete(':id')
   remove(@Param('id') id: string) {
-    return this.exchangeRatesService.remove(+id);
+    return this.exchangeRatesService.remove(id);
   }
 }

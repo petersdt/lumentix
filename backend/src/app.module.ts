@@ -20,6 +20,8 @@ import { NotificationModule } from './notifications/notification.module';
 import { CurrenciesModule } from './currencies/currencies.module';
 import { ExchangeRatesModule } from './exchange-rates/exchange-rates.module';
 import { TransactionsModule } from './transactions/transactions.module';
+import { TicketsModule } from './tickets/tickets.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -84,6 +86,8 @@ import { TransactionsModule } from './transactions/transactions.module';
     TransactionsModule,
     CurrenciesModule,
     ExchangeRatesModule,
+    TicketsModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [

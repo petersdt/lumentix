@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Currency } from './entities/currency.entity';
-
+// ...existing code...
 export interface CurrencyMeta {
   code: string;
   symbol: string;
@@ -34,5 +34,30 @@ export class CurrenciesService {
         { code: c.code, symbol: c.symbol, displayName: c.displayName },
       ]),
     );
+  }
+  async create(createCurrencyDto: Partial<Currency>): Promise<Currency> {
+    const currency = this.currencyRepository.create(createCurrencyDto);
+    return await this.currencyRepository.save(currency);
+  }
+
+  async findAll(): Promise<Currency[]> {
+    return await this.currencyRepository.find();
+  }
+
+  async findOne(id: string): Promise<Currency | undefined> {
+    const result = await this.currencyRepository.findOne({ where: { id } });
+    return result ?? undefined;
+  }
+
+  async update(
+    id: string,
+    updateCurrencyDto: Partial<Currency>,
+  ): Promise<Currency | undefined> {
+    await this.currencyRepository.update(id, updateCurrencyDto);
+    return await this.findOne(id);
+  }
+
+  async remove(id: string): Promise<void> {
+    await this.currencyRepository.delete(id);
   }
 }

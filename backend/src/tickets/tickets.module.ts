@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TicketEntity } from './entities/ticket.entity';
+import { TicketSigningService } from './ticket-signing.service';
+import { Event } from '../events/entities/event.entity';
+import { User } from '../users/entities/user.entity';
 import { TicketsService } from './tickets.service';
 import { TicketsController } from './tickets.controller';
 import { PaymentsModule } from '../payments/payments.module';
@@ -11,11 +14,11 @@ import { VerificationController } from './verification/verification.controller';
 @Module({
   imports: [
     ConfigModule,
-    TypeOrmModule.forFeature([TicketEntity]),
+    TypeOrmModule.forFeature([TicketEntity, Event, User]),
     PaymentsModule,
     StellarModule,
   ],
-  providers: [TicketsService],
+  providers: [TicketsService, TicketSigningService],
   controllers: [TicketsController, VerificationController],
   exports: [TicketsService],
 })
