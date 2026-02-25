@@ -167,3 +167,14 @@ mod tests {
         client.contribute(&event, &tier, &s, &1_i128);
     }
 }
+
+mod contract;
+mod events;
+mod models;
+
+#[cfg(test)]
+mod tests;
+
+pub use contract::TicketContract;
+pub use events::{CheckInEvent, TransferEvent};
+pub use models::{EventAuth, Ticket, ValidatorKey};
