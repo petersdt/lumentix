@@ -26,12 +26,18 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/.cargo/bin
             contract/target
           key: ${{ runner.os }}-cargo-${{ hashFiles('contract/Cargo.lock') }}
 
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+
       - name: Install Stellar CLI
         run: |
-          cargo install --locked stellar-cli
+          if ! command -v stellar &> /dev/null; then
+            cargo install --locked stellar-cli
+          fi
           stellar --version
 
       - name: Run tests
