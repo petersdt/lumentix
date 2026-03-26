@@ -8,7 +8,18 @@ describe('CurrenciesController', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CurrenciesController],
-      providers: [CurrenciesService],
+      providers: [
+        CurrenciesService,
+        {
+          provide: 'CurrencyRepository',
+          useValue: {
+            find: jest.fn(),
+            findOne: jest.fn(),
+            save: jest.fn(),
+            findOneBy: jest.fn(),
+          },
+        },
+      ],
     }).compile();
 
     controller = module.get<CurrenciesController>(CurrenciesController);

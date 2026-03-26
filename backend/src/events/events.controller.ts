@@ -21,11 +21,15 @@ import { Roles, Role } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedRequest } from '../common/interfaces/authenticated-request.interface';
+import { TicketsService } from '../tickets/tickets.service';
 
 @Controller('events')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EventsController {
-  constructor(private readonly eventsService: EventsService) {}
+  constructor(
+    private readonly eventsService: EventsService,
+    private readonly ticketsService: TicketsService,
+  ) { }
 
   @Post()
   @Roles(Role.ORGANIZER)

@@ -8,6 +8,7 @@ import { Horizon } from '@stellar/stellar-sdk';
 import { StellarService } from './stellar.service';
 import { PaymentsService } from '../payments/payments.service';
 import { SponsorsService } from '../sponsors/sponsors.service';
+import { ContributionsService } from '../sponsors/contributions.service';
 
 const RECONNECT_DELAY_MS = 5_000;
 const MAX_RECONNECT_DELAY_MS = 60_000;
@@ -26,6 +27,7 @@ export class StellarWebhookService implements OnModuleInit, OnModuleDestroy {
     private readonly stellarService: StellarService,
     private readonly paymentsService: PaymentsService,
     private readonly sponsorsService: SponsorsService,
+    private readonly contributionsService: ContributionsService,
   ) {}
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
@@ -160,8 +162,22 @@ export class StellarWebhookService implements OnModuleInit, OnModuleDestroy {
   // ─── Sponsor confirmation ─────────────────────────────────────────────────
 
   private async tryConfirmSponsor(transactionHash: string): Promise<boolean> {
-    // SponsorsService does not implement confirmSponsorPayment. No action.
-    return false;
+    try {
+      await this.contributionsService.confirmContribution(transactionHash);
+      this.logger.log(
+        `Sponsor contribution confirmed via stream: txHash=${transactionHash}`,
+      );
+      return true;
+    } catch (err: unknown) {
+      if (isNotFound(err)) return false;
+      if (isBadRequest(err) && isNotFoundMessage(err)) return false;
+
+      this.logger.error(
+        `Unexpected error confirming sponsor contribution for tx ${transactionHash}`,
+        err,
+      );
+      return false;
+    }
   }
 }
 

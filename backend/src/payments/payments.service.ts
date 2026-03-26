@@ -25,6 +25,7 @@ export interface PaymentIntent {
   amount: number;
   currency: string;
   memo: string;
+  expiresAt?: string;
 }
 
 @Injectable()
@@ -128,7 +129,7 @@ export class PaymentsService {
           amount: event.ticketPrice,
           currency,
           memo: existing.id,
-          expiresAt: existing.expiresAt.toISOString(),
+          expiresAt: existing.expiresAt?.toISOString(),
         };
       } else {
         // Expired intent, mark as failed
@@ -157,7 +158,7 @@ export class PaymentsService {
     });
 
     this.logger.log(
-      `Payment intent created: paymentId=${saved.id} event=${eventId} user=${userId} expiresAt=${saved.expiresAt.toISOString()}`,
+      `Payment intent created: paymentId=${saved.id} event=${eventId} user=${userId} expiresAt=${saved.expiresAt?.toISOString() ?? 'N/A'}`,
     );
 
     return {
@@ -166,7 +167,7 @@ export class PaymentsService {
       amount: event.ticketPrice,
       currency,
       memo: saved.id,
-      expiresAt: saved.expiresAt.toISOString(),
+      expiresAt: saved.expiresAt?.toISOString(),
     };
   }
 

@@ -1,12 +1,12 @@
-import { Controller, Get, Param, Query, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, Res, UseGuards, NotFoundException } from '@nestjs/common';
 import { AuditService } from './audit.service';
 import { AuditLog } from './entities/audit-log.entity';
 import { PaginationDto } from '../common/pagination/dto/pagination.dto';
 import { paginate } from '../common/pagination/pagination.helper';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../admin/roles.guard';
 import { Roles } from '../admin/roles.decorator';
-import { UserRole } from '../users/entities/user-role.enum';
+import { UserRole } from '../users/enums/user-role.enum';
 import { Response } from 'express';
 
 @Controller('admin/audit')
@@ -24,7 +24,9 @@ export class AuditController {
 
 	@Get(':id')
 	async getAuditLogById(@Param('id') id: string): Promise<AuditLog> {
-		return await this.auditService['auditLogRepository'].findOneBy({ id });
+		const log = await this.auditService['auditLogRepository'].findOneBy({ id });
+		if (!log) throw new NotFoundException(`AuditLog ${id} not found`);
+		return log;
 	}
 
 	@Get('export')

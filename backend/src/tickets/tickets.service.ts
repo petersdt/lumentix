@@ -1,59 +1,3 @@
-      async findByEvent(eventId: string, requesterId: string, paginationDto: any) {
-        // Ownership check
-        const event = await this.eventRepo.findOne({ where: { id: eventId } });
-        if (!event) throw new NotFoundException('Event not found');
-        if (event.organizerId !== requesterId) {
-          throw new ForbiddenException('You are not the organizer of this event.');
-        }
-        const queryBuilder = this.ticketRepo.createQueryBuilder('ticket')
-          .where('ticket.eventId = :eventId', { eventId });
-        // Optional status filter
-        if (paginationDto.status) {
-          queryBuilder.andWhere('ticket.status = :status', { status: paginationDto.status });
-        }
-        const { paginate } = await import('../common/pagination/pagination.helper');
-        return paginate(queryBuilder, paginationDto, 'ticket');
-      }
-
-      async getEventTicketSummary(eventId: string, requesterId: string) {
-        // Ownership check
-        const event = await this.eventRepo.findOne({ where: { id: eventId } });
-        if (!event) throw new NotFoundException('Event not found');
-        if (event.organizerId !== requesterId) {
-          throw new ForbiddenException('You are not the organizer of this event.');
-        }
-        const stats = await this.ticketRepo.createQueryBuilder('t')
-          .select('t.status', 'status')
-          .addSelect('COUNT(*)', 'count')
-          .where('t.eventId = :eventId', { eventId })
-          .groupBy('t.status')
-          .getRawMany();
-        const summary = { total: 0, valid: 0, used: 0, refunded: 0 };
-        for (const row of stats) {
-          summary[row.status] = Number(row.count);
-          summary.total += Number(row.count);
-        }
-        return summary;
-      }
-    async findOne(id: string, requesterId: string): Promise<TicketEntity> {
-      const ticket = await this.ticketRepo.findOne({ where: { id } });
-      if (!ticket) throw new NotFoundException('Ticket not found');
-      // Role check: Only owner, admin, or organizer of event can access
-      // For now, only owner allowed; extend as needed
-      if (ticket.ownerId !== requesterId) {
-        throw new ForbiddenException('You do not own this ticket.');
-      }
-      return ticket;
-    }
-  async findByOwner(ownerId: string, paginationDto: any) {
-    const queryBuilder = this.ticketRepo.createQueryBuilder('ticket')
-      .where('ticket.ownerId = :ownerId', { ownerId })
-      .orderBy('ticket.createdAt', 'DESC');
-    // Use paginate helper
-    // If you have a PaginationDto type, replace 'any' above
-    const { paginate } = await import('../common/pagination/pagination.helper');
-    return paginate(queryBuilder, paginationDto, 'ticket');
-  }
 import * as qrcode from 'qrcode';
 import { TicketSigningService } from './ticket-signing.service';
 import { IssueTicketResponseDto } from './dto/issue-ticket-response.dto';
@@ -61,7 +5,6 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
-  InternalServerErrorException,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -91,7 +34,7 @@ export class TicketsService {
     private readonly eventRepo: Repository<Event>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
-  ) {}
+  ) { }
 
   async issueTicket(paymentId: string): Promise<IssueTicketResponseDto> {
     const payment = await this.paymentsService.getPaymentById(paymentId);
@@ -111,7 +54,15 @@ export class TicketsService {
       const signature = this.ticketSigningService.sign(existing.id);
       const qrPayload = JSON.stringify({ ticketId: existing.id, signature });
       const qrCodeDataUrl = await qrcode.toDataURL(qrPayload);
-      return { ticket: existing, signature, qrCodeDataUrl };
+      return { 
+        ticket: existing, 
+        signature, 
+        qrCodeDataUrl,
+        ownerId: existing.ownerId,
+        assetCode: existing.assetCode,
+        status: existing.status,
+        transactionHash: existing.transactionHash as string
+      };
     }
 
     const tx = await this.stellarService.getTransaction(
@@ -141,13 +92,11 @@ export class TicketsService {
       status: 'valid',
     });
 
-    // Persist first to obtain the auto-generated UUID, then sign it
     const saved = await this.ticketRepo.save(ticket);
     const signature = this.ticketSigningService.sign(saved.id);
     const qrPayload = JSON.stringify({ ticketId: saved.id, signature });
     const qrCodeDataUrl = await qrcode.toDataURL(qrPayload);
 
-    // Fetch user email and event name
     const user = await this.userRepo.findOne({ where: { id: payment.userId } });
     const event = await this.eventRepo.findOne({
       where: { id: payment.eventId },
@@ -160,7 +109,15 @@ export class TicketsService {
       });
     }
 
-    return { ticket: saved, signature, qrCodeDataUrl };
+    return { 
+      ticket: saved, 
+      signature, 
+      qrCodeDataUrl,
+      ownerId: saved.ownerId,
+      assetCode: saved.assetCode,
+      status: saved.status,
+      transactionHash: saved.transactionHash as string
+    };
   }
 
   async transferTicket(
@@ -187,19 +144,15 @@ export class TicketsService {
     ticketId: string,
     signature: string,
   ): Promise<TicketEntity> {
-    // 1. Cryptographic signature check — must come before any DB lookup
-    //    to avoid leaking ticket existence to unauthenticated callers.
     if (!this.ticketSigningService.verify(ticketId, signature)) {
       throw new UnauthorizedException('Invalid ticket signature');
     }
 
-    // 2. Ticket existence check
     const ticket = await this.ticketRepo.findOne({ where: { id: ticketId } });
     if (!ticket) {
       throw new NotFoundException('Ticket not found');
     }
 
-    // 3. Status guard
     if (ticket.status === 'used') {
       throw new BadRequestException('Ticket has already been used');
     }
@@ -207,12 +160,59 @@ export class TicketsService {
       throw new BadRequestException('Ticket is no longer valid');
     }
 
-    // 4. Mark as used — atomic save prevents double-scan in practice;
-    //    a DB-level unique partial index on (id, status='used') is recommended
-    //    for high-throughput gate scenarios.
     ticket.status = 'used';
     return this.ticketRepo.save(ticket);
   }
 
-  // Private helpers removed; now handled by TicketSigningService
+  async findByEvent(eventId: string, requesterId: string, paginationDto: any) {
+    const event = await this.eventRepo.findOne({ where: { id: eventId } });
+    if (!event) throw new NotFoundException('Event not found');
+    if (event.organizerId !== requesterId) {
+      throw new ForbiddenException('You are not the organizer of this event.');
+    }
+    const queryBuilder = this.ticketRepo.createQueryBuilder('ticket')
+      .where('ticket.eventId = :eventId', { eventId });
+    if (paginationDto && paginationDto.status) {
+      queryBuilder.andWhere('ticket.status = :status', { status: paginationDto.status });
+    }
+    const { paginate } = await import('../common/pagination/pagination.helper');
+    return paginate(queryBuilder, paginationDto, 'ticket');
+  }
+
+  async getEventTicketSummary(eventId: string, requesterId: string) {
+    const event = await this.eventRepo.findOne({ where: { id: eventId } });
+    if (!event) throw new NotFoundException('Event not found');
+    if (event.organizerId !== requesterId) {
+      throw new ForbiddenException('You are not the organizer of this event.');
+    }
+    const stats = await this.ticketRepo.createQueryBuilder('t')
+      .select('t.status', 'status')
+      .addSelect('COUNT(*)', 'count')
+      .where('t.eventId = :eventId', { eventId })
+      .groupBy('t.status')
+      .getRawMany();
+    const summary: Record<string, number> = { total: 0, valid: 0, used: 0, refunded: 0 };
+    for (const row of stats) {
+      summary[row.status] = Number(row.count);
+      summary.total += Number(row.count);
+    }
+    return summary;
+  }
+
+  async findOne(id: string, requesterId: string): Promise<TicketEntity> {
+    const ticket = await this.ticketRepo.findOne({ where: { id } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    if (ticket.ownerId !== requesterId) {
+      throw new ForbiddenException('You do not own this ticket.');
+    }
+    return ticket;
+  }
+
+  async findByOwner(ownerId: string, paginationDto: any) {
+    const queryBuilder = this.ticketRepo.createQueryBuilder('ticket')
+      .where('ticket.ownerId = :ownerId', { ownerId })
+      .orderBy('ticket.createdAt', 'DESC');
+    const { paginate } = await import('../common/pagination/pagination.helper');
+    return paginate(queryBuilder, paginationDto, 'ticket');
+  }
 }

@@ -3,13 +3,13 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { RefundService } from './refund.service';
-import { Payment, PaymentStatus } from '../../entities/payment.entity';
-import { TicketEntity } from '../../../tickets/entities/ticket.entity';
-import { Event, EventStatus } from '../../../events/entities/event.entity';
-import { User } from '../../../users/entities/user.entity';
-import { StellarService } from '../../../stellar/stellar.service';
-import { AuditService } from '../../../audit/audit.service';
-import { EscrowService } from '../escrow.service';
+import { Payment, PaymentStatus } from '../entities/payment.entity';
+import { TicketEntity } from '../../tickets/entities/ticket.entity';
+import { Event, EventStatus } from '../../events/entities/event.entity';
+import { User } from '../../users/entities/user.entity';
+import { StellarService } from '../../stellar/stellar.service';
+import { AuditService } from '../../audit/audit.service';
+import { EscrowService } from '../services/escrow.service';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -20,27 +20,27 @@ const mockRepo = <T>() => ({
   update: jest.fn(),
 });
 
-const CANCELLED_EVENT: Partial<Event> = {
+const CANCELLED_EVENT = {
   id: 'event-1',
   title: 'Test Event',
   status: EventStatus.CANCELLED,
   escrowPublicKey: 'ESCROW_PUB',
   escrowSecretEncrypted: 'iv:tag:cipher',
-};
+} as Event;
 
-const CONFIRMED_PAYMENT: Partial<Payment> = {
+const CONFIRMED_PAYMENT = {
   id: 'pay-1',
   eventId: 'event-1',
   userId: 'user-1',
   amount: 10,
   currency: 'XLM',
   status: PaymentStatus.CONFIRMED,
-};
+} as Payment;
 
-const USER_WITH_KEY: Partial<User> = {
+const USER_WITH_KEY = {
   id: 'user-1',
   stellarPublicKey: 'GUSER_PUB_KEY',
-};
+} as User;
 
 // ─── Test suite ───────────────────────────────────────────────────────────────
 
@@ -201,7 +201,7 @@ describe('RefundService', () => {
     it('returns failure result when payment amount is 0', async () => {
       eventsRepo.findOne.mockResolvedValue(CANCELLED_EVENT);
       paymentsRepo.find.mockResolvedValue([
-        { ...CONFIRMED_PAYMENT, amount: 0 } as Payment,
+        { ...CONFIRMED_PAYMENT, amount: 0 },
       ]);
       escrowService.decryptEscrowSecret.mockResolvedValue('raw-secret');
       usersRepo.findOne.mockResolvedValue(USER_WITH_KEY);
@@ -216,7 +216,7 @@ describe('RefundService', () => {
     it('returns failure result when payment amount is negative', async () => {
       eventsRepo.findOne.mockResolvedValue(CANCELLED_EVENT);
       paymentsRepo.find.mockResolvedValue([
-        { ...CONFIRMED_PAYMENT, amount: -5 } as Payment,
+        { ...CONFIRMED_PAYMENT, amount: -5 },
       ]);
       escrowService.decryptEscrowSecret.mockResolvedValue('raw-secret');
       usersRepo.findOne.mockResolvedValue(USER_WITH_KEY);
@@ -238,7 +238,7 @@ describe('RefundService', () => {
       usersRepo.findOne.mockResolvedValue({
         ...USER_WITH_KEY,
         stellarPublicKey: null,
-      } as User);
+      });
 
       const results = await service.refundEvent('event-1');
 
@@ -252,15 +252,15 @@ describe('RefundService', () => {
 
   describe('refundEvent() — Stellar failure isolation', () => {
     it('isolates Stellar errors and continues processing other payments', async () => {
-      const payment2: Partial<Payment> = {
+      const payment2 = {
         ...CONFIRMED_PAYMENT,
         id: 'pay-2',
         userId: 'user-2',
-      };
-      const user2: Partial<User> = {
+      } as Payment;
+      const user2 = {
         id: 'user-2',
         stellarPublicKey: 'GUSER2_PUB_KEY',
-      };
+      } as User;
 
       eventsRepo.findOne.mockResolvedValue(CANCELLED_EVENT);
       paymentsRepo.find.mockResolvedValue([CONFIRMED_PAYMENT, payment2]);

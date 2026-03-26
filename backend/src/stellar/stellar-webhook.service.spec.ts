@@ -14,8 +14,10 @@ const mockPaymentsService = {
   confirmPayment: jest.fn(),
 };
 
-const mockSponsorsService = {
-  confirmSponsorPayment: jest.fn(),
+const mockSponsorsService = {};
+
+const mockContributionsService = {
+  confirmContribution: jest.fn(),
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -36,6 +38,7 @@ function buildService(): StellarWebhookService {
     mockStellarService as any,
     mockPaymentsService as any,
     mockSponsorsService as any,
+    mockContributionsService as any,
   );
 }
 
@@ -90,20 +93,20 @@ describe('StellarWebhookService', () => {
 
       await service.handlePayment(makePayment({ transaction_hash: 'tx-abc' }));
 
-      expect(mockPaymentsService.confirmPayment).toHaveBeenCalledWith('tx-abc');
+      expect(mockPaymentsService.confirmPayment).toHaveBeenCalledWith('tx-abc', 'system');
     });
 
     it('falls through to sponsor confirmation when no payment matches', async () => {
       mockPaymentsService.confirmPayment.mockRejectedValue(
         Object.assign(new NotFoundException(), { status: 404 }),
       );
-      mockSponsorsService.confirmSponsorPayment.mockResolvedValue({});
+      mockContributionsService.confirmContribution.mockResolvedValue({});
 
       await service.handlePayment(
         makePayment({ transaction_hash: 'tx-sponsor' }),
       );
 
-      expect(mockSponsorsService.confirmSponsorPayment).toHaveBeenCalledWith(
+      expect(mockContributionsService.confirmContribution).toHaveBeenCalledWith(
         'tx-sponsor',
       );
     });
@@ -112,7 +115,7 @@ describe('StellarWebhookService', () => {
       await service.handlePayment(makePayment({ type: 'set_options' as any }));
 
       expect(mockPaymentsService.confirmPayment).not.toHaveBeenCalled();
-      expect(mockSponsorsService.confirmSponsorPayment).not.toHaveBeenCalled();
+      expect(mockContributionsService.confirmContribution).not.toHaveBeenCalled();
     });
 
     it('skips payment records with no transaction_hash', async () => {
@@ -135,7 +138,7 @@ describe('StellarWebhookService', () => {
       mockPaymentsService.confirmPayment.mockRejectedValue(
         Object.assign(new NotFoundException(), { status: 404 }),
       );
-      mockSponsorsService.confirmSponsorPayment.mockRejectedValue(
+      mockContributionsService.confirmContribution.mockRejectedValue(
         new Error('unexpected sponsor error'),
       );
 
@@ -152,9 +155,7 @@ describe('StellarWebhookService', () => {
         }),
       );
 
-      expect(mockPaymentsService.confirmPayment).toHaveBeenCalledWith(
-        'tx-create',
-      );
+      expect(mockPaymentsService.confirmPayment).toHaveBeenCalledWith('tx-create', 'system');
     });
   });
 

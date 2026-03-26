@@ -7,6 +7,7 @@ import { EventsService } from './events.service';
 import { Event, EventStatus } from './entities/event.entity';
 import { CreateEventDto } from './dto/create-event.dto';
 import { ListEventsDto } from './dto/list-events.dto';
+import { EventStateService } from './state/event-state.service';
 
 const mockEvent: Event = {
   id: 'uuid-1',
@@ -19,6 +20,9 @@ const mockEvent: Event = {
   currency: 'USD',
   organizerId: 'organizer-1',
   status: EventStatus.DRAFT,
+  maxAttendees: 100,
+  escrowPublicKey: null,
+  escrowSecretEncrypted: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -40,6 +44,7 @@ describe('EventsService', () => {
       providers: [
         EventsService,
         { provide: getRepositoryToken(Event), useValue: mockRepo },
+        { provide: EventStateService, useValue: { validateTransition: jest.fn() } },
       ],
     }).compile();
 
@@ -74,9 +79,13 @@ describe('EventsService', () => {
       const updated = { ...mockEvent, title: 'Updated Title' };
       mockRepo.save.mockResolvedValue(updated);
 
-      const result = await service.updateEvent('uuid-1', {
-        title: 'Updated Title',
-      });
+      const result = await service.updateEvent(
+        'uuid-1',
+        {
+          title: 'Updated Title',
+        },
+        'organizer-1',
+      );
 
       expect(result.title).toBe('Updated Title');
       expect(mockRepo.save).toHaveBeenCalled();
@@ -86,7 +95,7 @@ describe('EventsService', () => {
       mockRepo.findOne.mockResolvedValue(null);
 
       await expect(
-        service.updateEvent('non-existent', { title: 'New' }),
+        service.updateEvent('non-existent', { title: 'New' }, 'caller-uuid'),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -96,7 +105,7 @@ describe('EventsService', () => {
       mockRepo.findOne.mockResolvedValue(mockEvent);
       mockRepo.remove.mockResolvedValue(mockEvent);
 
-      await service.deleteEvent('uuid-1');
+      await service.deleteEvent('uuid-1', 'organizer-1');
 
       expect(mockRepo.remove).toHaveBeenCalledWith(mockEvent);
     });
