@@ -12,6 +12,8 @@ import { StellarService } from '../stellar/stellar.service';
 import { AuditService } from '../audit/audit.service';
 import { ConfigService } from '@nestjs/config';
 import { EventStatus } from '../events/entities/event.entity';
+import { User } from '../users/entities/user.entity';
+import { NotificationService } from '../notifications/notification.service';
 
 describe('PaymentsService', () => {
   let service: PaymentsService;
@@ -63,10 +65,12 @@ describe('PaymentsService', () => {
       providers: [
         PaymentsService,
         { provide: getRepositoryToken(Payment), useValue: mockPaymentsRepo },
+        { provide: getRepositoryToken(User), useValue: { findOne: jest.fn() } },
         { provide: EventsService, useValue: mockEventsService },
         { provide: StellarService, useValue: mockStellarService },
         { provide: AuditService, useValue: mockAuditService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: NotificationService, useValue: { queuePaymentFailedEmail: jest.fn() } },
       ],
     }).compile();
 
