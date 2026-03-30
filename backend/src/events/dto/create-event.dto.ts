@@ -8,7 +8,7 @@ import {
   IsInt,
   Min,
 } from 'class-validator';
-import { EventStatus } from '../entities/event.entity';
+import { EventStatus, EventCategory } from '../entities/event.entity';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateEventDto {
@@ -61,13 +61,8 @@ export class CreateEventDto {
   @Min(1)
   maxAttendees?: number;
 
-  /**
-   * Optional sponsorship funding goal in XLM.
-   * Omit or set to null for no goal.
-   */
-  @ApiPropertyOptional({ example: 5000, description: 'Sponsorship funding goal in XLM' })
+  @ApiPropertyOptional({ enum: EventCategory, description: 'Event category' })
   @IsOptional()
-  @IsNumber()
-  @Min(0)
-  fundingGoal?: number;
+  @IsEnum(EventCategory)
+  category?: EventCategory;
 }

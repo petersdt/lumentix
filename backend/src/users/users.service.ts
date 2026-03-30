@@ -4,15 +4,20 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { User } from './entities/user.entity';
+import { TicketEntity } from '../tickets/entities/ticket.entity';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { RoleRequest } from './entities/role-request.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { RequestRoleDto } from './dto/request-role.dto';
 import { UserRole } from './enums/user-role.enum';
+import { UserStatus } from './enums/user-status.enum';
 import { CurrenciesService } from '../currencies/currencies.service';
 import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import {
@@ -32,6 +37,8 @@ export class UsersService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    @InjectRepository(TicketEntity)
+    private readonly ticketsRepository: Repository<TicketEntity>,
     @InjectRepository(RoleRequest)
     private readonly roleRequestRepository: Repository<RoleRequest>,
     private readonly currenciesService: CurrenciesService,
@@ -79,6 +86,71 @@ export class UsersService {
     user.passwordHash = passwordHash;
     const saved = await this.usersRepository.save(user);
     return this.sanitize(saved);
+  }
+
+  async updateProfile(
+    userId: string,
+    dto: UpdateProfileDto,
+  ): Promise<Omit<User, 'passwordHash'>> {
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+
+    if (dto.email && dto.email !== user.email) {
+      const existing = await this.usersRepository.findOne({
+        where: { email: dto.email },
+      });
+      if (existing) {
+        throw new ConflictException('A user with this email already exists');
+      }
+      user.email = dto.email;
+    }
+
+    if (dto.newPassword) {
+      if (!dto.currentPassword) {
+        throw new BadRequestException(
+          'Current password is required to change password',
+        );
+      }
+      const passwordMatch = await bcrypt.compare(
+        dto.currentPassword,
+        user.passwordHash,
+      );
+      if (!passwordMatch) {
+        throw new UnauthorizedException('Current password is incorrect');
+      }
+      user.passwordHash = await bcrypt.hash(
+        dto.newPassword,
+        BCRYPT_SALT_ROUNDS,
+      );
+    }
+
+    const saved = await this.usersRepository.save(user);
+    return this.sanitize(saved);
+  }
+
+  async deleteMyAccount(userId: string): Promise<void> {
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+
+    if (user.status === UserStatus.BLOCKED) {
+      throw new ConflictException('Blocked users cannot be deleted.');
+    }
+
+    const activeTickets = await this.ticketsRepository.count({
+      where: { ownerId: userId, status: 'valid' },
+    });
+    if (activeTickets > 0) {
+      throw new ConflictException(
+        'Users with active tickets cannot be deleted.',
+      );
+    }
+
+    user.deletedAt = new Date();
+    await this.usersRepository.save(user);
   }
 
   async updateWallet(
