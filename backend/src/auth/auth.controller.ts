@@ -16,6 +16,8 @@ import { BruteForceService } from '../common/services/brute-force.service';
 import { BruteForceGuard } from '../common/guards/brute-force.guard';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -82,5 +84,29 @@ export class AuthController {
 
       throw err;
     }
+  }
+
+  @Post('forgot-password')
+  @ApiOperation({
+    summary: 'Request password reset email',
+    description: 'Always returns 200 to avoid email enumeration.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Password reset email sent if account exists.',
+  })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  @ApiOperation({
+    summary: 'Reset password with token',
+    description: 'Uses one-time time-limited token from email.',
+  })
+  @ApiResponse({ status: 200, description: 'Password reset successful.' })
+  @ApiResponse({ status: 400, description: 'Invalid, expired, or used token.' })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 }

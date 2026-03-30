@@ -61,6 +61,21 @@ export class UsersService {
     return this.sanitize(user);
   }
 
+  async updatePassword(
+    userId: string,
+    newPassword: string,
+  ): Promise<Omit<User, 'passwordHash'>> {
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException(`User with id ${userId} not found`);
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, BCRYPT_SALT_ROUNDS);
+    user.passwordHash = passwordHash;
+    const saved = await this.usersRepository.save(user);
+    return this.sanitize(saved);
+  }
+
   async updateWallet(
     userId: string,
     publicKey: string,
